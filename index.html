@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Campervan Trip Log</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚐</text></svg>">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="header-inner">
+    <div class="brand">
+      <span class="brand-icon">🚐</span>
+      <div>
+        <h1>Trip Log</h1>
+        <p class="tagline">Campsites you've visited</p>
+      </div>
+    </div>
+    <button id="addBtn" class="btn btn-primary">+ Add campsite</button>
+  </div>
+
+  <div class="stats-bar" id="statsBar">
+    <div class="stat"><span class="stat-value" id="statCount">0</span><span class="stat-label">Campsites</span></div>
+    <div class="stat"><span class="stat-value" id="statNights">0</span><span class="stat-label">Nights</span></div>
+    <div class="stat"><span class="stat-value" id="statCountries">0</span><span class="stat-label">Countries</span></div>
+    <div class="stat"><span class="stat-value" id="statRating">–</span><span class="stat-label">Avg rating</span></div>
+  </div>
+</header>
+
+<main class="container">
+
+  <div class="toolbar">
+    <input type="search" id="searchInput" placeholder="Search by name, place, notes…" class="search-input">
+    <select id="sortSelect" class="select">
+      <option value="date-desc">Newest visit first</option>
+      <option value="date-asc">Oldest visit first</option>
+      <option value="rating-desc">Highest rated</option>
+      <option value="name-asc">Name (A–Z)</option>
+    </select>
+    <select id="filterRating" class="select">
+      <option value="0">Any rating</option>
+      <option value="5">★★★★★ only</option>
+      <option value="4">★★★★+ </option>
+      <option value="3">★★★+</option>
+    </select>
+    <select id="filterType" class="select">
+      <option value="">All types</option>
+    </select>
+    <div class="toolbar-spacer"></div>
+    <button id="exportBtn" class="btn btn-ghost" title="Download your data as a JSON file">Export</button>
+    <label class="btn btn-ghost" for="importInput" title="Load a previously exported JSON file">Import</label>
+    <input type="file" id="importInput" accept="application/json" hidden>
+  </div>
+
+  <div id="emptyState" class="empty-state" hidden>
+    <div class="empty-icon">🏕️</div>
+    <h2>No campsites yet</h2>
+    <p>Add the first stop on your trip log.</p>
+    <button class="btn btn-primary" id="emptyAddBtn">+ Add campsite</button>
+  </div>
+
+  <div id="noResults" class="empty-state" hidden>
+    <div class="empty-icon">🔍</div>
+    <h2>No matches</h2>
+    <p>Try a different search or filter.</p>
+  </div>
+
+  <div id="grid" class="grid"></div>
+
+</main>
+
+<!-- Add / Edit modal -->
+<div id="modalOverlay" class="modal-overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-header">
+      <h2 id="modalTitle">Add campsite</h2>
+      <button class="icon-btn" id="closeModalBtn" aria-label="Close">✕</button>
+    </div>
+    <form id="campsiteForm" class="modal-body">
+      <input type="hidden" id="fieldId">
+
+      <div class="form-row">
+        <label for="fieldName">Name *</label>
+        <input type="text" id="fieldName" required placeholder="e.g. Pine Ridge Campsite">
+      </div>
+
+      <div class="form-row two-col">
+        <div>
+          <label for="fieldPlace">Location / place *</label>
+          <input type="text" id="fieldPlace" required placeholder="e.g. Loch Lomond, Scotland">
+        </div>
+        <div>
+          <label for="fieldCountry">Country</label>
+          <input type="text" id="fieldCountry" placeholder="e.g. UK">
+        </div>
+      </div>
+
+      <div class="form-row two-col">
+        <div>
+          <label for="fieldDate">Date visited</label>
+          <input type="date" id="fieldDate">
+        </div>
+        <div>
+          <label for="fieldNights">Nights stayed</label>
+          <input type="number" id="fieldNights" min="0" step="1" value="1">
+        </div>
+      </div>
+
+      <div class="form-row two-col">
+        <div>
+          <label for="fieldType">Site type</label>
+          <select id="fieldType">
+            <option>Campsite</option>
+            <option>Aire / Stellplatz</option>
+            <option>Wild camping</option>
+            <option>CL / Farm site</option>
+            <option>Overnight car park</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div>
+          <label for="fieldCost">Cost per night</label>
+          <input type="text" id="fieldCost" placeholder="e.g. £18 or free">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label for="fieldClub">Club site</label>
+        <select id="fieldClub">
+          <option value="">Not a club site</option>
+          <option value="Caravan and Motorhome Club">Caravan and Motorhome Club (CAMC)</option>
+          <option value="Camping and Caravanning Club">Camping and Caravanning Club (C&amp;CC)</option>
+          <option value="Certificated Location (CL)">Certificated Location (CL)</option>
+          <option value="Certificated Site (CS)">Certificated Site (CS)</option>
+          <option value="Britstops">Britstops</option>
+          <option value="Other club">Other club</option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <label for="fieldPitch">Pitch type</label>
+        <select id="fieldPitch">
+          <option value="">Not specified</option>
+          <option value="Grass">Grass</option>
+          <option value="Hardstanding">Hardstanding</option>
+          <option value="Gravel">Gravel</option>
+          <option value="Concrete/Paved">Concrete / Paved</option>
+          <option value="Field/Open">Field / Open</option>
+          <option value="Fully serviced">Fully serviced</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <label>Rating</label>
+        <div class="star-picker" id="starPicker">
+          <button type="button" class="star" data-value="1">★</button>
+          <button type="button" class="star" data-value="2">★</button>
+          <button type="button" class="star" data-value="3">★</button>
+          <button type="button" class="star" data-value="4">★</button>
+          <button type="button" class="star" data-value="5">★</button>
+        </div>
+        <input type="hidden" id="fieldRating" value="0">
+      </div>
+
+      <div class="form-row">
+        <label>Facilities</label>
+        <div class="chip-group" id="facilitiesGroup">
+          <label class="chip" title="Toilets">
+            <input type="checkbox" value="Toilets">
+            <svg class="chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="8" height="4" rx="1"/><path d="M7 7h8v2.5A4 4 0 0 1 11 13.5 4 4 0 0 1 7 9.5V7Z"/><path d="M9 13.5 8 20h6l-1-6.5"/></svg>
+          </label>
+          <label class="chip" title="Showers">
+            <input type="checkbox" value="Showers">
+            <svg class="chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V7a4 4 0 0 1 8 0"/><circle cx="14" cy="10" r="3"/><path d="M9 15v.01M12 15v.01M15 15v.01M10.5 18v.01M13.5 18v.01"/></svg>
+          </label>
+          <label class="chip" title="Electric hookup">
+            <input type="checkbox" value="Electric hookup">
+            <svg class="chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v5M15 3v5"/><path d="M6 8h12v3a6 6 0 0 1-6 6 6 6 0 0 1-6-6V8Z"/><path d="M12 17v4"/></svg>
+          </label>
+          <label class="chip" title="Wifi">
+            <input type="checkbox" value="Wifi">
+            <svg class="chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8.5a16 16 0 0 1 20 0"/><path d="M5.5 12.5a11 11 0 0 1 13 0"/><path d="M9 16.5a5.5 5.5 0 0 1 6 0"/><circle cx="12" cy="20" r="1" fill="currentColor" stroke="none"/></svg>
+          </label>
+          <label class="chip" title="Town nearby">
+            <input type="checkbox" value="Town nearby">
+            <svg class="chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><rect x="4" y="10" width="5" height="11"/><rect x="10.5" y="6" width="5" height="15"/><rect x="16.5" y="13" width="4" height="8"/><path d="M6 13h1M6 16h1M12.5 9h1M12.5 12h1M12.5 15h1"/></svg>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label for="fieldNotes">Notes</label>
+        <textarea id="fieldNotes" rows="3" placeholder="What was it like? Would you go back?"></textarea>
+      </div>
+
+      <div class="form-row">
+        <label for="fieldPhoto">Photo</label>
+        <input type="file" id="fieldPhoto" accept="image/*">
+        <div id="photoPreviewWrap" class="photo-preview-wrap" hidden>
+          <img id="photoPreview" class="photo-preview" alt="Preview">
+          <button type="button" class="btn btn-ghost btn-small" id="removePhotoBtn">Remove photo</button>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-danger" id="deleteBtn" hidden>Delete</button>
+        <div class="modal-footer-right">
+          <button type="button" class="btn btn-ghost" id="cancelBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save campsite</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Detail view modal -->
+<div id="detailOverlay" class="modal-overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-header">
+      <h2 id="detailTitle">Campsite</h2>
+      <button class="icon-btn" id="closeDetailBtn" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" id="detailBody"></div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" id="detailEditBtn">Edit</button>
+      <div class="modal-footer-right">
+        <button type="button" class="btn btn-primary" id="detailCloseBtn">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>
