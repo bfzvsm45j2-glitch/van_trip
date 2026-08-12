@@ -1,33 +1,43 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import {
+  collection,
+  doc,
+  setDoc,
+  deleteDoc,
+  onSnapshot,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCxnA6DM1NT7PTobeR9NAzJrUV5qyPx7qE",
+  authDomain: "van-trip-log.firebaseapp.com",
+  projectId: "van-trip-log",
+  storageBucket: "van-trip-log.firebasestorage.app",
+  messagingSenderId: "228942866414",
+  appId: "1:228942866414:web:2e3c2765dd286ea40a10ff"
+};
+
+const fbApp = initializeApp(firebaseConfig);
+const db = initializeFirestore(fbApp, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
+const campsitesCol = collection(db, "campsites");
+
 (() => {
-  const STORAGE_KEY = 'tripLog.campsites.v1';
   const MAX_PHOTO_DIM = 900;
   const PHOTO_QUALITY = 0.72;
 
   /** @type {Array<Object>} */
-  let campsites = loadCampsites();
+  let campsites = [];
   let currentRating = 0;
   let currentPhotoDataUrl = null;
   let editingId = null;
   let detailId = null;
 
-  // ---------- Storage ----------
-
-  function loadCampsites() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch (e) {
-      console.error('Failed to load campsites', e);
-      return [];
-    }
-  }
-
-  function saveCampsites() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(campsites));
-  }
-
-  function uid() {
-    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  function newId() {
+    return doc(campsitesCol).id;
   }
 
   // ---------- DOM refs ----------
@@ -311,13 +321,13 @@
 
   // ---------- Form submit / delete ----------
 
-  campsiteForm.addEventListener('submit', (e) => {
+  campsiteForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
     const facilities = Array.from(campsiteForm.querySelectorAll('.chip input:checked')).map(cb => cb.value);
 
+    const id = editingId || newId();
     const data = {
-      id: editingId || uid(),
       name: document.getElementById('fieldName').value.trim(),
       place: document.getElementById('fieldPlace').value.trim(),
       country: document.getElementById('fieldCountry').value.trim(),
@@ -335,28 +345,30 @@
 
     if (!data.name || !data.place) return;
 
-    if (editingId) {
-      const idx = campsites.findIndex(c => c.id === editingId);
-      if (idx !== -1) campsites[idx] = data;
-      showToast('Campsite updated');
-    } else {
-      campsites.push(data);
-      showToast('Campsite added');
-    }
-
-    saveCampsites();
-    render();
+    const wasEditing = !!editingId;
     closeModal();
+
+    try {
+      await setDoc(doc(campsitesCol, id), data);
+      showToast(wasEditing ? 'Campsite updated' : 'Campsite added');
+    } catch (err) {
+      console.error(err);
+      showToast('Could not save — check your connection');
+    }
   });
 
-  deleteBtn.addEventListener('click', () => {
+  deleteBtn.addEventListener('click', async () => {
     if (!editingId) return;
     if (!confirm('Delete this campsite from your log?')) return;
-    campsites = campsites.filter(c => c.id !== editingId);
-    saveCampsites();
-    render();
+    const id = editingId;
     closeModal();
-    showToast('Campsite deleted');
+    try {
+      await deleteDoc(doc(campsitesCol, id));
+      showToast('Campsite deleted');
+    } catch (err) {
+      console.error(err);
+      showToast('Could not delete — check your connection');
+    }
   });
 
   // ---------- Detail view ----------
@@ -461,7 +473,7 @@
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const imported = JSON.parse(reader.result);
         if (!Array.isArray(imported)) throw new Error('Invalid file format');
@@ -469,13 +481,12 @@
         let added = 0;
         for (const item of imported) {
           if (!item || typeof item !== 'object' || !item.name) continue;
-          if (!item.id || existingIds.has(item.id)) item.id = uid();
-          campsites.push(item);
-          existingIds.add(item.id);
+          const id = (item.id && !existingIds.has(item.id)) ? item.id : newId();
+          const { id: _drop, ...rest } = item;
+          await setDoc(doc(campsitesCol, id), rest);
+          existingIds.add(id);
           added++;
         }
-        saveCampsites();
-        render();
         showToast(`Imported ${added} campsite${added === 1 ? '' : 's'}`);
       } catch (err) {
         console.error(err);
@@ -509,4 +520,12 @@
   // ---------- Init ----------
 
   render();
+
+  onSnapshot(campsitesCol, (snapshot) => {
+    campsites = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    render();
+  }, (err) => {
+    console.error('Firestore sync error', err);
+    showToast('Sync error — check your connection');
+  });
 })();
