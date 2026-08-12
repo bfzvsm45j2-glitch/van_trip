@@ -9,6 +9,19 @@
 </head>
 <body>
 
+<div id="lockOverlay" class="lock-overlay">
+  <form id="lockForm" class="lock-card">
+    <span class="lock-icon">🚐</span>
+    <h1>Trip Log</h1>
+    <p class="lock-subtitle">Enter the PIN to view and add campsites</p>
+    <input type="password" inputmode="numeric" autocomplete="off" id="lockPin" class="lock-input" placeholder="PIN" maxlength="12" autofocus>
+    <button type="submit" class="btn btn-primary lock-submit">Unlock</button>
+    <p id="lockError" class="lock-error" hidden>Incorrect PIN, try again.</p>
+  </form>
+</div>
+
+<div id="appRoot" hidden>
+
 <header class="app-header">
   <div class="header-inner">
     <div class="brand">
@@ -234,6 +247,8 @@
 </div>
 
 <div id="toast" class="toast" hidden></div>
+
+</div>
 
 <script type="module" src="app.js"></script>
 </body>

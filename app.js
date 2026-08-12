@@ -25,7 +25,7 @@ const db = initializeFirestore(fbApp, {
 });
 const campsitesCol = collection(db, "campsites");
 
-(() => {
+function startApp() {
   const MAX_PHOTO_DIM = 900;
   const PHOTO_QUALITY = 0.72;
 
@@ -528,4 +528,46 @@ const campsitesCol = collection(db, "campsites");
     console.error('Firestore sync error', err);
     showToast('Sync error — check your connection');
   });
-})();
+}
+
+// ---------- PIN gate ----------
+
+const PIN_HASH = 'ae600959378c54c51d1b867e77cef34eba55658bf2abcec187cfe901526d0a80';
+const UNLOCK_KEY = 'tripLog.unlocked';
+
+async function hashPin(value) {
+  const data = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function unlockApp() {
+  document.getElementById('lockOverlay').hidden = true;
+  document.getElementById('appRoot').hidden = false;
+  startApp();
+}
+
+if (localStorage.getItem(UNLOCK_KEY) === 'true') {
+  unlockApp();
+} else {
+  const lockForm = document.getElementById('lockForm');
+  const lockPin = document.getElementById('lockPin');
+  const lockError = document.getElementById('lockError');
+  const lockCard = document.querySelector('.lock-card');
+
+  lockForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const hash = await hashPin(lockPin.value.trim());
+    if (hash === PIN_HASH) {
+      localStorage.setItem(UNLOCK_KEY, 'true');
+      unlockApp();
+    } else {
+      lockError.hidden = false;
+      lockCard.classList.remove('shake');
+      void lockCard.offsetWidth;
+      lockCard.classList.add('shake');
+      lockPin.value = '';
+      lockPin.focus();
+    }
+  });
+}
