@@ -62,6 +62,14 @@
       <option value="">All types</option>
     </select>
     <div class="toolbar-spacer"></div>
+    <div class="view-toggle" id="viewToggle">
+      <button type="button" class="view-btn" data-view="grid" title="Grid view" aria-label="Grid view">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>
+      </button>
+      <button type="button" class="view-btn" data-view="list" title="List view" aria-label="List view">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      </button>
+    </div>
     <button id="exportBtn" class="btn btn-ghost" title="Download your data as a JSON file">Export</button>
     <label class="btn btn-ghost" for="importInput" title="Load a previously exported JSON file">Import</label>
     <input type="file" id="importInput" accept="application/json" hidden>
@@ -81,6 +89,7 @@
   </div>
 
   <div id="grid" class="grid"></div>
+  <div id="list" class="list-view" hidden></div>
 
 </main>
 

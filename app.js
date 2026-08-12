@@ -54,12 +54,17 @@ function startApp() {
   // ---------- DOM refs ----------
 
   const grid = document.getElementById('grid');
+  const listEl = document.getElementById('list');
+  const viewToggle = document.getElementById('viewToggle');
   const emptyState = document.getElementById('emptyState');
   const noResults = document.getElementById('noResults');
   const searchInput = document.getElementById('searchInput');
   const sortSelect = document.getElementById('sortSelect');
   const filterRating = document.getElementById('filterRating');
   const filterType = document.getElementById('filterType');
+
+  const VIEW_KEY = 'tripLog.viewMode';
+  let viewMode = localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid';
 
   const modalOverlay = document.getElementById('modalOverlay');
   const modalTitle = document.getElementById('modalTitle');
@@ -77,7 +82,7 @@ function startApp() {
   function render() {
     renderStats();
     renderTypeFilter();
-    renderGrid();
+    renderResults();
   }
 
   function renderStats() {
@@ -130,18 +135,42 @@ function startApp() {
     return list;
   }
 
-  function renderGrid() {
+  function renderResults() {
     const list = getFilteredSorted();
-    grid.innerHTML = '';
+    const hasResults = list.length > 0;
 
     emptyState.hidden = campsites.length !== 0;
     noResults.hidden = !(campsites.length > 0 && list.length === 0);
-    grid.hidden = list.length === 0;
+    grid.hidden = !(hasResults && viewMode === 'grid');
+    listEl.hidden = !(hasResults && viewMode === 'list');
 
-    for (const c of list) {
-      grid.appendChild(buildCard(c));
+    if (viewMode === 'list') {
+      listEl.innerHTML = '';
+      for (const c of list) {
+        listEl.appendChild(buildRow(c));
+      }
+    } else {
+      grid.innerHTML = '';
+      for (const c of list) {
+        grid.appendChild(buildCard(c));
+      }
     }
   }
+
+  function setViewMode(mode) {
+    viewMode = mode;
+    localStorage.setItem(VIEW_KEY, mode);
+    viewToggle.querySelectorAll('.view-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.view === mode);
+    });
+    renderResults();
+  }
+
+  viewToggle.addEventListener('click', (e) => {
+    const btn = e.target.closest('.view-btn');
+    if (!btn) return;
+    setViewMode(btn.dataset.view);
+  });
 
   function starString(rating) {
     let out = '';
@@ -180,6 +209,30 @@ function startApp() {
       </div>
     `;
     return card;
+  }
+
+  function buildRow(c) {
+    const row = document.createElement('div');
+    row.className = 'list-row';
+    row.addEventListener('click', () => openDetail(c.id));
+
+    const thumbHtml = c.photo
+      ? `<img class="list-thumb" src="${c.photo}" alt="${escapeHtml(c.name)}">`
+      : `<div class="list-thumb-placeholder">🏕️</div>`;
+
+    row.innerHTML = `
+      ${thumbHtml}
+      <div class="list-main">
+        <div class="list-name">${escapeHtml(c.name)}</div>
+        <div class="list-place">${escapeHtml(c.place || '')}${c.country ? ', ' + escapeHtml(c.country) : ''}</div>
+      </div>
+      <div class="list-meta">
+        <span class="stars">${starString(c.rating || 0)}</span>
+        <span class="badge">${escapeHtml(c.type || 'Campsite')}</span>
+        <span class="list-date">${c.date ? formatDate(c.date) : 'No date'}</span>
+      </div>
+    `;
+    return row;
   }
 
   function formatDate(iso) {
@@ -460,10 +513,10 @@ function startApp() {
 
   // ---------- Search / filter / sort ----------
 
-  searchInput.addEventListener('input', renderGrid);
-  sortSelect.addEventListener('change', renderGrid);
-  filterRating.addEventListener('change', renderGrid);
-  filterType.addEventListener('change', renderGrid);
+  searchInput.addEventListener('input', renderResults);
+  sortSelect.addEventListener('change', renderResults);
+  filterRating.addEventListener('change', renderResults);
+  filterType.addEventListener('change', renderResults);
 
   // ---------- Export / Import ----------
 
@@ -529,6 +582,10 @@ function startApp() {
   });
 
   // ---------- Init ----------
+
+  viewToggle.querySelectorAll('.view-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === viewMode);
+  });
 
   render();
 
