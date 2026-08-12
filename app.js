@@ -250,6 +250,10 @@ function startApp() {
     }[s]));
   }
 
+  function normalizeUrl(url) {
+    return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+  }
+
   // ---------- Add/Edit modal ----------
 
   function openAddModal() {
@@ -283,6 +287,8 @@ function startApp() {
     document.getElementById('fieldClub').value = c.club || '';
     document.getElementById('fieldPitch').value = c.pitch || '';
     document.getElementById('fieldCost').value = c.cost || '';
+    document.getElementById('fieldPhone').value = c.phone || '';
+    document.getElementById('fieldWebsite').value = c.website || '';
     document.getElementById('fieldNotes').value = c.notes || '';
     setRating(c.rating || 0);
     campsiteForm.querySelectorAll('.chip input').forEach(cb => {
@@ -401,6 +407,8 @@ function startApp() {
       club: document.getElementById('fieldClub').value,
       pitch: document.getElementById('fieldPitch').value,
       cost: document.getElementById('fieldCost').value.trim(),
+      phone: document.getElementById('fieldPhone').value.trim(),
+      website: document.getElementById('fieldWebsite').value.trim(),
       rating: currentRating,
       facilities,
       notes: document.getElementById('fieldNotes').value.trim(),
@@ -477,6 +485,14 @@ function startApp() {
         <div>
           <div class="detail-field-label">Pitch type</div>
           <div class="detail-field-value">${escapeHtml(c.pitch || '–')}</div>
+        </div>
+        <div>
+          <div class="detail-field-label">Phone</div>
+          <div class="detail-field-value">${c.phone ? `<a class="map-link" href="tel:${escapeHtml(c.phone.replace(/\s+/g, ''))}">${escapeHtml(c.phone)}</a>` : '–'}</div>
+        </div>
+        <div>
+          <div class="detail-field-label">Website</div>
+          <div class="detail-field-value">${c.website ? `<a class="map-link" target="_blank" rel="noopener" href="${escapeHtml(normalizeUrl(c.website))}">${escapeHtml(c.website.replace(/^https?:\/\//, '').replace(/\/$/, ''))}</a>` : '–'}</div>
         </div>
       </div>
       <div style="margin-bottom:14px;">
