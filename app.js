@@ -1,5 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {
+  getFirestore,
   collection,
   doc,
   setDoc,
@@ -20,9 +21,19 @@ const firebaseConfig = {
 };
 
 const fbApp = initializeApp(firebaseConfig);
-const db = initializeFirestore(fbApp, {
-  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-});
+let db;
+try {
+  // Offline persistence needs IndexedDB + the Web Locks API, which some
+  // browsers restrict under strict privacy settings — fall back to an
+  // in-memory (network-only) Firestore instance rather than breaking the
+  // whole script (which would also take the PIN gate down with it).
+  db = initializeFirestore(fbApp, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+  });
+} catch (err) {
+  console.error('Persistent Firestore cache unavailable, falling back to in-memory cache', err);
+  db = getFirestore(fbApp);
+}
 const campsitesCol = collection(db, "campsites");
 
 function startApp() {
