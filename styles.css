@@ -261,6 +261,38 @@ input:focus, select:focus, textarea:focus {
   box-shadow: var(--shadow);
 }
 
+.map-view {
+  height: 60vh;
+  min-height: 360px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  background: var(--surface-alt);
+}
+
+.map-status {
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin: 10px 0 0;
+}
+
+.map-popup { font-family: inherit; }
+.map-popup .popup-name { font-weight: 700; margin: 0 0 4px; }
+.map-popup .popup-place { font-size: 0.8rem; color: var(--text-muted); margin: 0 0 8px; }
+.map-popup button {
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: var(--primary);
+  color: var(--primary-contrast);
+  border: none;
+  border-radius: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
 .list-row {
   display: flex;
   align-items: center;

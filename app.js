@@ -55,6 +55,8 @@ function startApp() {
 
   const grid = document.getElementById('grid');
   const listEl = document.getElementById('list');
+  const mapEl = document.getElementById('map');
+  const mapStatus = document.getElementById('mapStatus');
   const viewToggle = document.getElementById('viewToggle');
   const emptyState = document.getElementById('emptyState');
   const noResults = document.getElementById('noResults');
@@ -64,7 +66,7 @@ function startApp() {
   const filterType = document.getElementById('filterType');
 
   const VIEW_KEY = 'tripLog.viewMode';
-  let viewMode = localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid';
+  let viewMode = ['list', 'map'].includes(localStorage.getItem(VIEW_KEY)) ? localStorage.getItem(VIEW_KEY) : 'grid';
 
   const modalOverlay = document.getElementById('modalOverlay');
   const modalTitle = document.getElementById('modalTitle');
@@ -143,12 +145,16 @@ function startApp() {
     noResults.hidden = !(campsites.length > 0 && list.length === 0);
     grid.hidden = !(hasResults && viewMode === 'grid');
     listEl.hidden = !(hasResults && viewMode === 'list');
+    mapEl.hidden = !(hasResults && viewMode === 'map');
+    mapStatus.hidden = !(hasResults && viewMode === 'map');
 
     if (viewMode === 'list') {
       listEl.innerHTML = '';
       for (const c of list) {
         listEl.appendChild(buildRow(c));
       }
+    } else if (viewMode === 'map') {
+      if (hasResults) updateMap(list);
     } else {
       grid.innerHTML = '';
       for (const c of list) {
@@ -171,6 +177,111 @@ function startApp() {
     if (!btn) return;
     setViewMode(btn.dataset.view);
   });
+
+  // ---------- Map view ----------
+
+  let leafletMap = null;
+  let markerLayer = null;
+  const geocodingInFlight = new Set();
+
+  function ensureMapInit() {
+    if (leafletMap) return;
+    leafletMap = L.map(mapEl, { scrollWheelZoom: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
+    }).addTo(leafletMap);
+    markerLayer = L.layerGroup().addTo(leafletMap);
+    leafletMap.setView([54.5, -3], 5);
+  }
+
+  function hasCoords(c) {
+    return typeof c.lat === 'number' && typeof c.lng === 'number';
+  }
+
+  function updateMap(list) {
+    ensureMapInit();
+    requestAnimationFrame(() => leafletMap.invalidateSize());
+
+    const located = list.filter(hasCoords);
+    const failed = list.filter(c => c.geocodeFailed && !hasCoords(c));
+    const pending = list.filter(c => c.place && !c.geocodeFailed && !hasCoords(c));
+
+    markerLayer.clearLayers();
+    for (const c of located) {
+      const marker = L.marker([c.lat, c.lng]);
+      const popupEl = document.createElement('div');
+      popupEl.className = 'map-popup';
+      popupEl.innerHTML = `
+        <p class="popup-name">${escapeHtml(c.name)}</p>
+        <p class="popup-place">${escapeHtml(c.place || '')}${c.country ? ', ' + escapeHtml(c.country) : ''}</p>
+        <button type="button">View details</button>
+      `;
+      popupEl.querySelector('button').addEventListener('click', () => {
+        leafletMap.closePopup();
+        openDetail(c.id);
+      });
+      marker.bindPopup(popupEl);
+      marker.addTo(markerLayer);
+    }
+
+    if (located.length) {
+      leafletMap.fitBounds(L.latLngBounds(located.map(c => [c.lat, c.lng])), { padding: [30, 30], maxZoom: 14 });
+    } else {
+      leafletMap.setView([54.5, -3], 5);
+    }
+
+    if (pending.length) {
+      mapStatus.hidden = false;
+      mapStatus.textContent = `Locating ${pending.length} campsite${pending.length === 1 ? '' : 's'}…`;
+      geocodeMissing(pending);
+    } else if (failed.length) {
+      mapStatus.hidden = false;
+      mapStatus.textContent = `Showing ${located.length} of ${list.length} — ${failed.length} couldn't be located automatically.`;
+    } else if (!located.length) {
+      mapStatus.hidden = false;
+      mapStatus.textContent = 'No campsites to show yet.';
+    } else {
+      mapStatus.hidden = true;
+    }
+  }
+
+  function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  async function geocodePlace(query) {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`;
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) return null;
+    const results = await res.json();
+    if (!results.length) return null;
+    return { lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon) };
+  }
+
+  async function geocodeMissing(pending) {
+    const toFetch = pending.filter(c => !geocodingInFlight.has(c.id));
+    if (!toFetch.length) return;
+    for (const c of toFetch) geocodingInFlight.add(c.id);
+
+    for (const c of toFetch) {
+      try {
+        const query = [c.place, c.country].filter(Boolean).join(', ');
+        const coords = await geocodePlace(query);
+        if (coords) {
+          await setDoc(doc(campsitesCol, c.id), { lat: coords.lat, lng: coords.lng }, { merge: true });
+        } else {
+          await setDoc(doc(campsitesCol, c.id), { geocodeFailed: true }, { merge: true });
+        }
+      } catch (err) {
+        console.error('Geocoding failed for', c.name, err);
+      } finally {
+        geocodingInFlight.delete(c.id);
+      }
+      // Nominatim's usage policy asks for at most ~1 request/second.
+      await sleep(1100);
+    }
+  }
 
   function starString(rating) {
     let out = '';
