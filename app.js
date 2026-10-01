@@ -42,13 +42,42 @@ function startApp() {
 
   /** @type {Array<Object>} */
   let campsites = [];
-  let currentRating = 0;
   let currentPhotoDataUrl = null;
   let editingId = null;
   let detailId = null;
 
   function newId() {
     return doc(campsitesCol).id;
+  }
+
+  function newVisitId() {
+    return 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  // A campsite "site" document holds a `visits` array (date, nights, cost,
+  // rating, notes per visit). Older documents saved before this feature
+  // existed just have those fields at the top level — treat that as a
+  // single implicit visit rather than migrating every existing record.
+  function getVisits(c) {
+    if (Array.isArray(c.visits) && c.visits.length) return c.visits;
+    return [{
+      id: 'legacy',
+      date: c.date || '',
+      nights: c.nights || 0,
+      rating: c.rating || 0,
+      cost: c.cost || '',
+      notes: c.notes || '',
+    }];
+  }
+
+  function visitSummary(c) {
+    const visits = getVisits(c);
+    const sorted = [...visits].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const latest = sorted[0];
+    const totalNights = visits.reduce((sum, v) => sum + (Number(v.nights) || 0), 0);
+    const rated = visits.filter(v => v.rating > 0);
+    const avgRating = rated.length ? rated.reduce((sum, v) => sum + v.rating, 0) / rated.length : 0;
+    return { visits, latest, totalNights, avgRating, count: visits.length };
   }
 
   // ---------- DOM refs ----------
@@ -89,10 +118,20 @@ function startApp() {
 
   function renderStats() {
     const count = campsites.length;
-    const nights = campsites.reduce((sum, c) => sum + (Number(c.nights) || 0), 0);
+    let nights = 0;
+    let ratingSum = 0;
+    let ratingCount = 0;
+    for (const c of campsites) {
+      for (const v of getVisits(c)) {
+        nights += Number(v.nights) || 0;
+        if (v.rating > 0) {
+          ratingSum += v.rating;
+          ratingCount++;
+        }
+      }
+    }
     const countries = new Set(campsites.map(c => (c.country || '').trim().toLowerCase()).filter(Boolean)).size;
-    const rated = campsites.filter(c => c.rating > 0);
-    const avgRating = rated.length ? (rated.reduce((s, c) => s + c.rating, 0) / rated.length).toFixed(1) : '–';
+    const avgRating = ratingCount ? (ratingSum / ratingCount).toFixed(1) : '–';
 
     document.getElementById('statCount').textContent = count;
     document.getElementById('statNights').textContent = nights;
@@ -113,11 +152,12 @@ function startApp() {
     const minRating = Number(filterRating.value);
     const type = filterType.value;
 
-    let list = campsites.filter(c => {
-      if (minRating && (c.rating || 0) < minRating) return false;
+    let list = campsites.map(c => ({ c, summary: visitSummary(c) })).filter(({ c, summary }) => {
+      if (minRating && summary.avgRating < minRating) return false;
       if (type && c.type !== type) return false;
       if (q) {
-        const haystack = [c.name, c.place, c.country, c.notes].join(' ').toLowerCase();
+        const notesBlob = summary.visits.map(v => v.notes).join(' ');
+        const haystack = [c.name, c.place, c.country, notesBlob].join(' ').toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       return true;
@@ -126,15 +166,15 @@ function startApp() {
     const sortMode = sortSelect.value;
     list.sort((a, b) => {
       switch (sortMode) {
-        case 'date-asc': return (a.date || '').localeCompare(b.date || '');
-        case 'rating-desc': return (b.rating || 0) - (a.rating || 0);
-        case 'name-asc': return a.name.localeCompare(b.name);
+        case 'date-asc': return (a.summary.latest.date || '').localeCompare(b.summary.latest.date || '');
+        case 'rating-desc': return b.summary.avgRating - a.summary.avgRating;
+        case 'name-asc': return a.c.name.localeCompare(b.c.name);
         case 'date-desc':
-        default: return (b.date || '').localeCompare(a.date || '');
+        default: return (b.summary.latest.date || '').localeCompare(a.summary.latest.date || '');
       }
     });
 
-    return list;
+    return list.map(({ c, summary }) => ({ ...c, _summary: summary }));
   }
 
   function renderResults() {
@@ -209,12 +249,13 @@ function startApp() {
 
     markerLayer.clearLayers();
     for (const c of located) {
+      const s = c._summary || visitSummary(c);
       const marker = L.marker([c.lat, c.lng]);
       const popupEl = document.createElement('div');
       popupEl.className = 'map-popup';
       popupEl.innerHTML = `
         <p class="popup-name">${escapeHtml(c.name)}</p>
-        <p class="popup-place">${escapeHtml(c.place || '')}${c.country ? ', ' + escapeHtml(c.country) : ''}</p>
+        <p class="popup-place">${escapeHtml(c.place || '')}${c.country ? ', ' + escapeHtml(c.country) : ''}${s.count > 1 ? ` · ${s.count} visits` : ''}</p>
         <button type="button">View details</button>
       `;
       popupEl.querySelector('button').addEventListener('click', () => {
@@ -296,6 +337,8 @@ function startApp() {
     card.className = 'card';
     card.addEventListener('click', () => openDetail(c.id));
 
+    const s = c._summary || visitSummary(c);
+
     const photoHtml = c.photo
       ? `<img class="card-photo" src="${c.photo}" alt="${escapeHtml(c.name)}">`
       : `<div class="card-photo-placeholder">🏕️</div>`;
@@ -309,13 +352,14 @@ function startApp() {
         <h3 class="card-name">${escapeHtml(c.name)}</h3>
         <p class="card-place">${escapeHtml(c.place || '')}${c.country ? ', ' + escapeHtml(c.country) : ''}</p>
         <div class="card-meta">
-          <span class="stars">${starString(c.rating || 0)}</span>
+          <span class="stars">${starString(Math.round(s.avgRating))}</span>
           <span class="badge">${escapeHtml(c.type || 'Campsite')}</span>
         </div>
         <div class="card-meta">
-          <span>${c.date ? formatDate(c.date) : 'No date'}</span>
-          <span>${c.nights ? c.nights + ' night' + (c.nights == 1 ? '' : 's') : ''}</span>
+          <span>${s.latest.date ? formatDate(s.latest.date) : 'No date'}</span>
+          <span>${s.totalNights ? s.totalNights + ' night' + (s.totalNights === 1 ? '' : 's') : ''}</span>
         </div>
+        ${s.count > 1 ? `<div class="card-visits">↻ ${s.count} visits</div>` : ''}
         ${facilities ? `<div class="card-facilities">${escapeHtml(facilities)}${moreCount > 0 ? ` +${moreCount} more` : ''}</div>` : ''}
       </div>
     `;
@@ -327,6 +371,8 @@ function startApp() {
     row.className = 'list-row';
     row.addEventListener('click', () => openDetail(c.id));
 
+    const s = c._summary || visitSummary(c);
+
     const thumbHtml = c.photo
       ? `<img class="list-thumb" src="${c.photo}" alt="${escapeHtml(c.name)}">`
       : `<div class="list-thumb-placeholder">🏕️</div>`;
@@ -335,12 +381,12 @@ function startApp() {
       ${thumbHtml}
       <div class="list-main">
         <div class="list-name">${escapeHtml(c.name)}</div>
-        <div class="list-place">${escapeHtml(c.place || '')}${c.country ? ', ' + escapeHtml(c.country) : ''}</div>
+        <div class="list-place">${escapeHtml(c.place || '')}${c.country ? ', ' + escapeHtml(c.country) : ''}${s.count > 1 ? ` <span class="list-visits">· ↻ ${s.count}</span>` : ''}</div>
       </div>
       <div class="list-meta">
-        <span class="stars">${starString(c.rating || 0)}</span>
+        <span class="stars">${starString(Math.round(s.avgRating))}</span>
         <span class="badge">${escapeHtml(c.type || 'Campsite')}</span>
-        <span class="list-date">${c.date ? formatDate(c.date) : 'No date'}</span>
+        <span class="list-date">${s.latest.date ? formatDate(s.latest.date) : 'No date'}</span>
       </div>
     `;
     return row;
@@ -367,19 +413,78 @@ function startApp() {
 
   // ---------- Add/Edit modal ----------
 
+  const visitsList = document.getElementById('visitsList');
+  const addVisitBtn = document.getElementById('addVisitBtn');
+
+  function createVisitRow(visit) {
+    const row = document.createElement('div');
+    row.className = 'visit-row';
+    const rating = visit?.rating || 0;
+    if (visit?.id) row.dataset.visitId = visit.id;
+    row.dataset.rating = String(rating);
+    row.innerHTML = `
+      <button type="button" class="remove-visit-btn" title="Remove this visit">✕</button>
+      <div class="visit-row-grid">
+        <div>
+          <label>Date</label>
+          <input type="date" class="visit-date" value="${escapeHtml(visit?.date || '')}">
+        </div>
+        <div>
+          <label>Nights</label>
+          <input type="number" min="0" step="1" class="visit-nights" value="${visit?.nights ?? 1}">
+        </div>
+        <div>
+          <label>Cost/night</label>
+          <input type="text" class="visit-cost" placeholder="e.g. £18" value="${escapeHtml(visit?.cost || '')}">
+        </div>
+      </div>
+      <div class="visit-rating-row">
+        <label>Rating</label>
+        <div class="visit-star-picker">
+          ${[1, 2, 3, 4, 5].map(n => `<button type="button" class="vstar${n <= rating ? ' on' : ''}" data-value="${n}">★</button>`).join('')}
+        </div>
+      </div>
+      <textarea class="visit-notes" rows="2" placeholder="Notes for this visit…">${escapeHtml(visit?.notes || '')}</textarea>
+    `;
+
+    row.querySelectorAll('.vstar').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = Number(btn.dataset.value);
+        const current = Number(row.dataset.rating) || 0;
+        const next = val === current ? 0 : val;
+        row.dataset.rating = String(next);
+        row.querySelectorAll('.vstar').forEach(b => b.classList.toggle('on', Number(b.dataset.value) <= next));
+      });
+    });
+
+    row.querySelector('.remove-visit-btn').addEventListener('click', () => {
+      if (visitsList.children.length <= 1) {
+        showToast('A campsite needs at least one visit');
+        return;
+      }
+      row.remove();
+    });
+
+    return row;
+  }
+
+  addVisitBtn.addEventListener('click', () => {
+    const today = new Date().toISOString().slice(0, 10);
+    visitsList.appendChild(createVisitRow({ date: today, nights: 1, rating: 0, cost: '', notes: '' }));
+  });
+
   function openAddModal() {
     editingId = null;
     modalTitle.textContent = 'Add campsite';
     deleteBtn.hidden = true;
     campsiteForm.reset();
     document.getElementById('fieldId').value = '';
-    document.getElementById('fieldNights').value = '1';
     document.getElementById('fieldType').value = 'Campsite';
-    setRating(0);
     clearPhoto();
     campsiteForm.querySelectorAll('.chip input').forEach(cb => cb.checked = false);
     const today = new Date().toISOString().slice(0, 10);
-    document.getElementById('fieldDate').value = today;
+    visitsList.innerHTML = '';
+    visitsList.appendChild(createVisitRow({ date: today, nights: 1, rating: 0, cost: '', notes: '' }));
     modalOverlay.hidden = false;
     document.getElementById('fieldName').focus();
   }
@@ -392,16 +497,11 @@ function startApp() {
     document.getElementById('fieldName').value = c.name || '';
     document.getElementById('fieldPlace').value = c.place || '';
     document.getElementById('fieldCountry').value = c.country || '';
-    document.getElementById('fieldDate').value = c.date || '';
-    document.getElementById('fieldNights').value = c.nights ?? 1;
     document.getElementById('fieldType').value = c.type || 'Campsite';
     document.getElementById('fieldClub').value = c.club || '';
     document.getElementById('fieldPitch').value = c.pitch || '';
-    document.getElementById('fieldCost').value = c.cost || '';
     document.getElementById('fieldPhone').value = c.phone || '';
     document.getElementById('fieldWebsite').value = c.website || '';
-    document.getElementById('fieldNotes').value = c.notes || '';
-    setRating(c.rating || 0);
     campsiteForm.querySelectorAll('.chip input').forEach(cb => {
       cb.checked = (c.facilities || []).includes(cb.value);
     });
@@ -410,27 +510,17 @@ function startApp() {
     } else {
       clearPhoto();
     }
+    visitsList.innerHTML = '';
+    const visits = [...getVisits(c)].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    for (const v of visits) {
+      visitsList.appendChild(createVisitRow(v));
+    }
     modalOverlay.hidden = false;
   }
 
   function closeModal() {
     modalOverlay.hidden = true;
   }
-
-  function setRating(n) {
-    currentRating = n;
-    document.getElementById('fieldRating').value = n;
-    document.querySelectorAll('#starPicker .star').forEach(btn => {
-      btn.classList.toggle('on', Number(btn.dataset.value) <= n);
-    });
-  }
-
-  document.getElementById('starPicker').addEventListener('click', (e) => {
-    const btn = e.target.closest('.star');
-    if (!btn) return;
-    const val = Number(btn.dataset.value);
-    setRating(val === currentRating ? 0 : val);
-  });
 
   document.getElementById('addBtn').addEventListener('click', openAddModal);
   document.getElementById('emptyAddBtn').addEventListener('click', openAddModal);
@@ -507,26 +597,53 @@ function startApp() {
 
     const facilities = Array.from(campsiteForm.querySelectorAll('.chip input:checked')).map(cb => cb.value);
 
+    const visits = Array.from(visitsList.querySelectorAll('.visit-row')).map(row => ({
+      id: row.dataset.visitId || newVisitId(),
+      date: row.querySelector('.visit-date').value,
+      nights: Number(row.querySelector('.visit-nights').value) || 0,
+      cost: row.querySelector('.visit-cost').value.trim(),
+      rating: Number(row.dataset.rating) || 0,
+      notes: row.querySelector('.visit-notes').value.trim(),
+    }));
+
+    if (!visits.length) {
+      showToast('Add at least one visit');
+      return;
+    }
+
+    const place = document.getElementById('fieldPlace').value.trim();
+    const country = document.getElementById('fieldCountry').value.trim();
+
     const id = editingId || newId();
+    const existing = editingId ? campsites.find(x => x.id === editingId) : null;
+    const locationChanged = existing && (existing.place !== place || existing.country !== country);
+
     const data = {
       name: document.getElementById('fieldName').value.trim(),
-      place: document.getElementById('fieldPlace').value.trim(),
-      country: document.getElementById('fieldCountry').value.trim(),
-      date: document.getElementById('fieldDate').value,
-      nights: Number(document.getElementById('fieldNights').value) || 0,
+      place,
+      country,
       type: document.getElementById('fieldType').value,
       club: document.getElementById('fieldClub').value,
       pitch: document.getElementById('fieldPitch').value,
-      cost: document.getElementById('fieldCost').value.trim(),
       phone: document.getElementById('fieldPhone').value.trim(),
       website: document.getElementById('fieldWebsite').value.trim(),
-      rating: currentRating,
       facilities,
-      notes: document.getElementById('fieldNotes').value.trim(),
       photo: currentPhotoDataUrl,
+      visits,
     };
 
     if (!data.name || !data.place) return;
+
+    // setDoc without merge replaces the whole document — carry over the
+    // already-geocoded map coordinates unless the location text changed,
+    // otherwise they'd be silently wiped on every edit.
+    if (existing && !locationChanged) {
+      if (typeof existing.lat === 'number') {
+        data.lat = existing.lat;
+        data.lng = existing.lng;
+      }
+      if (existing.geocodeFailed) data.geocodeFailed = true;
+    }
 
     const wasEditing = !!editingId;
     closeModal();
@@ -564,10 +681,12 @@ function startApp() {
 
     const mapQuery = [c.name, c.place, c.country].filter(Boolean).join(', ');
     const mapUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(mapQuery);
+    const s = visitSummary(c);
+    const visitsSorted = [...s.visits].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
     detailBody.innerHTML = `
       ${c.photo ? `<img class="detail-photo" src="${c.photo}" alt="${escapeHtml(c.name)}">` : ''}
-      <div class="stars" style="font-size:1.1rem;margin-bottom:10px;">${starString(c.rating || 0)}</div>
+      <div class="stars" style="font-size:1.1rem;margin-bottom:10px;">${starString(Math.round(s.avgRating))}</div>
       <div class="detail-grid">
         <div>
           <div class="detail-field-label">Location</div>
@@ -576,18 +695,6 @@ function startApp() {
         <div>
           <div class="detail-field-label">Type</div>
           <div class="detail-field-value">${escapeHtml(c.type || '–')}</div>
-        </div>
-        <div>
-          <div class="detail-field-label">Date visited</div>
-          <div class="detail-field-value">${c.date ? formatDate(c.date) : '–'}</div>
-        </div>
-        <div>
-          <div class="detail-field-label">Nights stayed</div>
-          <div class="detail-field-value">${c.nights ?? '–'}</div>
-        </div>
-        <div>
-          <div class="detail-field-label">Cost per night</div>
-          <div class="detail-field-value">${escapeHtml(c.cost || '–')}</div>
         </div>
         <div>
           <div class="detail-field-label">Club site</div>
@@ -613,10 +720,19 @@ function startApp() {
         <div class="detail-field-label">Facilities</div>
         <div class="detail-facilities">${c.facilities.map(f => `<span class="badge">${escapeHtml(f)}</span>`).join('')}</div>
       ` : ''}
-      ${c.notes ? `
-        <div class="detail-field-label" style="margin-top:14px;">Notes</div>
-        <div class="detail-notes">${escapeHtml(c.notes)}</div>
-      ` : ''}
+      <div class="detail-field-label" style="margin-top:14px;">Visits (${s.count}) · ${s.totalNights} night${s.totalNights === 1 ? '' : 's'} total</div>
+      <div class="visits-history">
+        ${visitsSorted.map(v => `
+          <div class="visit-entry">
+            <div class="visit-entry-header">
+              <span class="visit-entry-date">${v.date ? formatDate(v.date) : 'No date'}</span>
+              <span class="stars">${starString(v.rating || 0)}</span>
+            </div>
+            <div class="visit-entry-meta">${v.nights ? v.nights + ' night' + (v.nights == 1 ? '' : 's') : ''}${v.cost ? ' · ' + escapeHtml(v.cost) : ''}</div>
+            ${v.notes ? `<div class="detail-notes">${escapeHtml(v.notes)}</div>` : ''}
+          </div>
+        `).join('')}
+      </div>
     `;
 
     detailOverlay.hidden = false;

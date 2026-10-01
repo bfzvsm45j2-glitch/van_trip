@@ -444,6 +444,76 @@ input:focus, select:focus, textarea:focus {
 .photo-preview-wrap { margin-top: 10px; display: flex; align-items: center; gap: 12px; }
 .photo-preview { width: 96px; height: 96px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); }
 
+.visits-list { display: flex; flex-direction: column; gap: 12px; }
+
+.visit-row {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  background: var(--surface-alt);
+}
+.visit-row-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.visit-row-grid label, .visit-rating-row label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: 4px;
+}
+.visit-row input { width: 100%; }
+.visit-rating-row { margin-bottom: 10px; }
+.visit-star-picker { display: flex; gap: 2px; }
+.visit-star-picker .vstar {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: var(--star-off);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+.visit-star-picker .vstar.on { color: var(--star-on); }
+.visit-notes {
+  width: 100%;
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  resize: vertical;
+  background: var(--surface);
+  color: var(--text);
+}
+.remove-visit-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 5px;
+  border-radius: 6px;
+}
+.remove-visit-btn:hover { background: var(--border); color: var(--danger); }
+.add-visit-btn { margin-top: 10px; }
+
+@media (max-width: 520px) {
+  .visit-row-grid { grid-template-columns: 1fr 1fr; }
+}
+
+.visits-history { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.visit-entry { background: var(--surface-alt); border-radius: 10px; padding: 10px 14px; }
+.visit-entry-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 4px; }
+.visit-entry-date { font-weight: 600; font-size: 0.88rem; }
+.visit-entry-meta { font-size: 0.8rem; color: var(--text-muted); }
+.visit-entry .detail-notes { margin-top: 6px; }
+
+.card-visits, .list-visits { font-size: 0.78rem; color: var(--primary); font-weight: 600; }
+
 .modal-footer {
   display: flex;
   align-items: center;

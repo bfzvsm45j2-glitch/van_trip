@@ -131,33 +131,16 @@
         </div>
       </div>
 
-      <div class="form-row two-col">
-        <div>
-          <label for="fieldDate">Date visited</label>
-          <input type="date" id="fieldDate">
-        </div>
-        <div>
-          <label for="fieldNights">Nights stayed</label>
-          <input type="number" id="fieldNights" min="0" step="1" value="1">
-        </div>
-      </div>
-
-      <div class="form-row two-col">
-        <div>
-          <label for="fieldType">Site type</label>
-          <select id="fieldType">
-            <option>Campsite</option>
-            <option>Aire / Stellplatz</option>
-            <option>Wild camping</option>
-            <option>CL / Farm site</option>
-            <option>Overnight car park</option>
-            <option>Other</option>
-          </select>
-        </div>
-        <div>
-          <label for="fieldCost">Cost per night</label>
-          <input type="text" id="fieldCost" placeholder="e.g. £18 or free">
-        </div>
+      <div class="form-row">
+        <label for="fieldType">Site type</label>
+        <select id="fieldType">
+          <option>Campsite</option>
+          <option>Aire / Stellplatz</option>
+          <option>Wild camping</option>
+          <option>CL / Farm site</option>
+          <option>Overnight car park</option>
+          <option>Other</option>
+        </select>
       </div>
 
       <div class="form-row">
@@ -199,18 +182,6 @@
       </div>
 
       <div class="form-row">
-        <label>Rating</label>
-        <div class="star-picker" id="starPicker">
-          <button type="button" class="star" data-value="1">★</button>
-          <button type="button" class="star" data-value="2">★</button>
-          <button type="button" class="star" data-value="3">★</button>
-          <button type="button" class="star" data-value="4">★</button>
-          <button type="button" class="star" data-value="5">★</button>
-        </div>
-        <input type="hidden" id="fieldRating" value="0">
-      </div>
-
-      <div class="form-row">
         <label>Facilities</label>
         <div class="chip-group" id="facilitiesGroup">
           <label class="chip" title="Toilets">
@@ -237,8 +208,9 @@
       </div>
 
       <div class="form-row">
-        <label for="fieldNotes">Notes</label>
-        <textarea id="fieldNotes" rows="3" placeholder="What was it like? Would you go back?"></textarea>
+        <label>Visits</label>
+        <div id="visitsList" class="visits-list"></div>
+        <button type="button" class="btn btn-ghost btn-small add-visit-btn" id="addVisitBtn">+ Add another visit</button>
       </div>
 
       <div class="form-row">
